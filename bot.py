@@ -49,6 +49,7 @@ COST_PER_LYRICS = 10
 COST_PER_SHORTEN = 5
 COST_PER_PRAYER = 5
 COST_PER_REPEAT = 5
+COST_PER_MEME = 10
 
 # ফাইল পাথ
 DATA_FILE = "users.json"
@@ -507,4 +508,4 @@ def handle_text(message):
             
         elif action == 'prayer_time':
             try:
-                url = f"http://api.aladhan.com/v1/timingsByCity?city={text}&
+                url = f"http://api.aladhan.com/v1/timings
