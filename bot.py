@@ -26,11 +26,11 @@ BOT_USERNAME = "@HashtagMasterPro_Bot"
 FORCE_SUB_CHANNEL = "@ArifurHackworld" 
 GAME_URL = "https://biplobc384-dotcom.github.io/gamezone" 
 
-# API Keys (আপনার আগের ফাইল থেকে)
+# API Keys
 RMBG_API_KEY = "QijuTptTcicEgtSVwE3KKx4d"
 OCR_API_KEY = "helloworld" 
 
-# খরচ সেটিংস (আপনার লিস্ট অনুযায়ী)
+# খরচ সেটিংস
 COST_PER_POST = 20
 COST_PER_IMAGE = 30
 COST_PER_QR = 10
@@ -113,7 +113,6 @@ def update_points(user_id, amount):
 def get_points(user_id):
     data = load_json(DATA_FILE)
     return data.get(str(user_id), {}).get('points', 0)
-
 # ================= সাবস্ক্রিপশন চেক =================
 def is_subscribed(user_id):
     if not FORCE_SUB_CHANNEL: return True
@@ -209,7 +208,6 @@ def get_ocr_text(image_bytes):
         r = requests.post(url, files=files, data=payload, timeout=15)
         return r.json()['ParsedResults'][0]['ParsedText']
     except: return None
-
 # ================= মেইন হ্যান্ডলার =================
 
 @bot.message_handler(commands=['start'])
@@ -284,7 +282,7 @@ def handle_files(message):
                     update_points(uid, -COST_PER_PDF)
                 except: bot.reply_to(message, "❌ এরর।")
 
-        user_temp_data.pop(cid)
+        if cid in user_temp_data: user_temp_data.pop(cid)
 
 # ================= ALL FEATURES LOGIC =================
 @bot.message_handler(func=lambda m: True)
@@ -495,7 +493,9 @@ def handle_text(message):
                 update_points(uid, -COST_PER_LYRICS)
             except: bot.reply_to(message, "❌ পাওয়া যায়নি।")
             user_temp_data.pop(cid)
-            return        elif action == 'url_shorten':
+            return
+
+        elif action == 'url_shorten':
             try:
                 res = requests.get(f"http://tinyurl.com/api-create.php?url={text}").text
                 bot.reply_to(message, f"🔗 লিংক: {res}")
@@ -503,7 +503,7 @@ def handle_text(message):
             except: bot.reply_to(message, "❌ এরর।")
             user_temp_data.pop(cid)
             return
-            
+
         elif action == 'prayer_time':
             try:
                 date_str = datetime.now().strftime("%d-%m-%Y")
@@ -530,11 +530,106 @@ def handle_text(message):
                 user_temp_data.pop(cid)
             return
 
+    # --- মেনু ন্যাভিগেশন ---
+    if text == "🤖 এআই ও ক্রিয়েশন":
+        bot.send_message(cid, "🤖 AI মেনু:", reply_markup=get_ai_menu())
+    elif text == "🛠 ইউটিলিটি টুলস":
+        bot.send_message(cid, "🛠 টুলস মেনু:", reply_markup=get_utility_menu())
+    elif text == "💻 সাইবার ও টেক":
+        bot.send_message(cid, "💻 সাইবার মেনু:", reply_markup=get_cyber_menu())
+    elif text == "🎮 ফান ও গেমস":
+        bot.send_message(cid, "🎮 ফান মেনু:", reply_markup=get_fun_menu(uid))
+    elif text == "🏦 ব্যাংক ও লটারি":
+        bot.send_message(cid, "🏦 ব্যাংক মেনু:", reply_markup=get_bank_menu())
+    elif text == "👑 অ্যাডমিন প্যানেল" and uid == ADMIN_ID:
+        bot.send_message(cid, "👑 অ্যাডমিন প্যানেল:", reply_markup=get_admin_menu())
+    elif text == "🔙 মেইন মেনু":
+        bot.send_message(cid, "🏠 মেইন মেনু:", reply_markup=get_home_menu(uid))
+    elif text == "👤 প্রোফাইল ও ব্যালেন্স":
+        data = get_user_data(uid)
+        msg = f"👤 **প্রোফাইল:**\n📛 নাম: {data['name']}\n💰 পয়েন্ট: {data['points']}\n🏦 ব্যাংক: {data['bank']}\n📅 জয়েন: {data['joined'][:10]}"
+        bot.send_message(cid, msg)
+
+    # --- সাব-মেনু কমান্ড ---
+    # (AI)
+    elif text == "🤖 এআই চ্যাট":
+        user_temp_data[cid] = {'action': 'ai_chat'}
+        bot.reply_to(message, "🤖 কিছু লিখুন:", reply_markup=get_cancel_menu())
+    elif text == "🎨 এআই ছবি":
+        user_temp_data[cid] = {'action': 'ai_image'}
+        bot.reply_to(message, "🎨 কী আঁকতে চান? (English)", reply_markup=get_cancel_menu())
+    elif text == "📝 পোস্ট মেকার":
+        user_temp_data[cid] = {'action': 'post_maker'}
+        bot.reply_to(message, "📝 বিষয় লিখুন:", reply_markup=get_cancel_menu())
+    elif text == "🗣️ টেক্সট টু স্পিচ":
+        user_temp_data[cid] = {'action': 'text_to_speech'}
+        bot.reply_to(message, "🗣️ টেক্সট লিখুন:", reply_markup=get_cancel_menu())
+    elif text == "✍️ বানান চেক":
+        user_temp_data[cid] = {'action': 'spell_check'}
+        bot.reply_to(message, "✍️ ভুল বানানটি লিখুন:", reply_markup=get_cancel_menu())
+    elif text == "🖼️ OCR (ছবি->টেক্সট)":
+        user_temp_data[cid] = {'action': 'ocr_scan'}
+        bot.reply_to(message, "🖼️ ছবি পাঠান:", reply_markup=get_cancel_menu())
+
+    # (Utility)
+    elif text == "🖼️ ব্যাকগ্রাউন্ড রিমুভ":
+        user_temp_data[cid] = {'action': 'remove_bg'}
+        bot.reply_to(message, "🖼️ ছবি পাঠান:", reply_markup=get_cancel_menu())
+    elif text == "🌤 লাইভ আবহাওয়া":
+        user_temp_data[cid] = {'action': 'weather_check'}
+        bot.reply_to(message, "🌤 শহরের নাম দিন:", reply_markup=get_cancel_menu())
+    elif text == "📱 QR মেকার":
+        user_temp_data[cid] = {'action': 'qr_make'}
+        bot.reply_to(message, "📱 টেক্সট বা লিংক দিন:", reply_markup=get_cancel_menu())
+    elif text == "📄 ছবি থেকে PDF":
+        user_temp_data[cid] = {'action': 'img_to_pdf'}
+        bot.reply_to(message, "📄 ছবি পাঠান:", reply_markup=get_cancel_menu())
+    elif text == "📸 4K স্ক্রিনশট":
+        user_temp_data[cid] = {'action': 'ss_web'}
+        bot.reply_to(message, "🔗 ওয়েবসাইটের লিংক দিন:", reply_markup=get_cancel_menu())
+    elif text == "🔗 ইউআরএল শর্টনার":
+        user_temp_data[cid] = {'action': 'url_shorten'}
+        bot.reply_to(message, "🔗 বড় লিংক দিন:", reply_markup=get_cancel_menu())
+    elif text == "🔁 টেক্সট রিপিটার":
+        user_temp_data[cid] = {'action': 'repeater_text'}
+        bot.reply_to(message, "🔁 টেক্সট দিন:", reply_markup=get_cancel_menu())
+    elif text == "🌐 অনুবাদক":
+        user_temp_data[cid] = {'action': 'translator'}
+        bot.reply_to(message, "🌐 টেক্সট দিন (যেকোনো ভাষা):", reply_markup=get_cancel_menu())
+    elif text == "🕋 নামাজের সময়সূচি":
+        user_temp_data[cid] = {'action': 'prayer_time'}
+        bot.reply_to(message, "🕋 আপনার জেলা/শহরের নাম লিখুন (Example: Dhaka):", reply_markup=get_cancel_menu())
+
+    # (Cyber)
+    elif text == "🔐 Base64 টুল":
+        user_temp_data[cid] = {'action': 'base64_tool'}
+        bot.reply_to(message, "🔐 টেক্সট দিন:", reply_markup=get_cancel_menu())
+    elif text == "💳 BIN চেকার":
+        user_temp_data[cid] = {'action': 'bin_check'}
+        bot.reply_to(message, "💳 BIN (First 6 digits):", reply_markup=get_cancel_menu())
+    elif text == "💰 ক্রিপ্টো রেট":
+        user_temp_data[cid] = {'action': 'crypto_rate'}
+        bot.reply_to(message, "💰 কয়েন নাম (BTC, ETH):", reply_markup=get_cancel_menu())
+    elif text == "✅ সাইট স্ট্যাটাস":
+        user_temp_data[cid] = {'action': 'site_check'}
+        bot.reply_to(message, "🔗 সাইট লিংক:", reply_markup=get_cancel_menu())
+    
+    # (Fun)
+    elif text == "🎼 লিরিক্স ফাইন্ডার":
+        user_temp_data[cid] = {'action': 'lyrics_find'}
+        bot.reply_to(message, "🎼 গানের নাম:", reply_markup=get_cancel_menu())
+
+    elif text == "❌ বাতিল করুন":
+        if cid in user_temp_data: user_temp_data.pop(cid)
+        bot.reply_to(message, "❌ অ্যাকশন বাতিল করা হয়েছে।", reply_markup=get_home_menu(uid))
+
 # ================= বট রান করার কমান্ড =================
 if __name__ == "__main__":
+    # Flask সার্ভার একটি আলাদা থ্রেডে রান হবে (Render এর জন্য জরুরি)
     t = threading.Thread(target=run_web_server)
     t.start()
     
+    # বট পোলিং শুরু
     print("🤖 Bot is Running...")
     bot.infinity_polling()
-                
+        
