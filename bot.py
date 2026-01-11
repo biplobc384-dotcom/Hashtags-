@@ -509,3 +509,40 @@ def handle_text(message):
         elif action == 'prayer_time':
             try:
                 url = f"http://api.aladhan.com/v1/timings
+        elif action == 'prayer_time':
+            try:
+                # অসম্পূর্ণ লাইনটি ঠিক করা হয়েছে
+                date_str = datetime.now().strftime("%d-%m-%Y")
+                url = f"http://api.aladhan.com/v1/timingsByCity?city={text}&country=Bangladesh&method=1"
+                req = requests.get(url).json()
+                
+                if req['code'] == 200:
+                    t = req['data']['timings']
+                    msg = (f"🕋 **নামাজের সময়সূচি ({text})**\n"
+                           f"📅 তারিখ: {req['data']['date']['readable']}\n\n"
+                           f"ফজর: {t['Fajr']}\n"
+                           f"জোহর: {t['Dhuhr']}\n"
+                           f"আছর: {t['Asr']}\n"
+                           f"মাগরিব: {t['Maghrib']}\n"
+                           f"এশা: {t['Isha']}")
+                    bot.reply_to(message, msg)
+                    update_points(uid, -COST_PER_PRAYER)
+                else:
+                    bot.reply_to(message, "❌ শহরের নাম সঠিক দিন (ইংরেজিতে)।")
+            except Exception as e:
+                bot.reply_to(message, "❌ তথ্য পাওয়া যায়নি।")
+            
+            # টেম্প ডাটা ক্লিয়ার করা
+            if cid in user_temp_data:
+                user_temp_data.pop(cid)
+            return
+
+# ================= বট রান করার কমান্ড =================
+if __name__ == "__main__":
+    # Flask সার্ভার একটি আলাদা থ্রেডে রান হবে (Render এর জন্য জরুরি)
+    t = threading.Thread(target=run_web_server)
+    t.start()
+    
+    # বট পোলিং শুরু
+    print("🤖 Bot is Running...")
+    bot.infinity_polling()
