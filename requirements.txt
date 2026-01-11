@@ -1,0 +1,6 @@
+pyTelegramBotAPI
+requests
+gTTS
+Pillow
+Flask
+python-dotenv
