@@ -7,7 +7,7 @@ import requests
 import urllib.parse
 import base64
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from io import BytesIO
 from PIL import Image
 from flask import Flask
@@ -16,40 +16,25 @@ from dotenv import load_dotenv
 # ================= কনফিগারেশন =================
 load_dotenv()
 
-# টোকেন সেটআপ
-API_TOKEN = os.getenv('BOT_TOKEN') 
-if not API_TOKEN:
-    API_TOKEN = 'YOUR_BOT_TOKEN_HERE' 
-
-ADMIN_ID = 6740599881 
+# টোকেন এবং কী সেটআপ (ENV থেকে লোড করার চেষ্টা করবে, না পেলে ডিফল্ট স্ট্রিং ব্যবহার করবে)
+API_TOKEN = os.getenv('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE') 
+ADMIN_ID = int(os.getenv('ADMIN_ID', '6740599881'))
 BOT_USERNAME = "@HashtagMasterPro_Bot" 
 FORCE_SUB_CHANNEL = "@ArifurHackworld" 
 GAME_URL = "https://biplobc384-dotcom.github.io/gamezone" 
 
-# API Keys
-RMBG_API_KEY = "QijuTptTcicEgtSVwE3KKx4d"
-OCR_API_KEY = "helloworld" 
+# API Keys (নিজেদের রিয়েল কী বসাবেন .env ফাইলে)
+RMBG_API_KEY = os.getenv('RMBG_API_KEY', "QijuTptTcicEgtSVwE3KKx4d")
+OCR_API_KEY = os.getenv('OCR_API_KEY', "helloworld") 
+WEATHER_API_KEY = os.getenv('WEATHER_API_KEY', "e868212133404c01b44123547231406")
 
 # খরচ সেটিংস
-COST_PER_POST = 20
-COST_PER_IMAGE = 30
-COST_PER_QR = 10
-COST_PER_TTS = 10
-COST_PER_BG = 20
-COST_PER_SS = 15
-COST_PER_PDF = 10
-COST_PER_OCR = 10
-COST_PER_AI_CHAT = 20
-COST_PER_WEATHER = 10
-COST_PER_CRYPTO = 10
-COST_PER_FAKE_ID = 10
-COST_PER_SITE = 10
-COST_PER_BIN = 10
-COST_PER_LYRICS = 10
-COST_PER_SHORTEN = 5
-COST_PER_PRAYER = 5
-COST_PER_REPEAT = 5
-COST_PER_MEME = 10
+COSTS = {
+    'POST': 20, 'IMAGE': 30, 'QR': 10, 'TTS': 10, 'BG': 20,
+    'SS': 15, 'PDF': 10, 'OCR': 10, 'AI_CHAT': 20, 'WEATHER': 10,
+    'CRYPTO': 10, 'SITE': 10, 'BIN': 10, 'LYRICS': 10,
+    'SHORTEN': 5, 'PRAYER': 5, 'REPEAT': 5
+}
 
 # ফাইল পাথ
 DATA_FILE = "users.json"
@@ -57,7 +42,6 @@ CODES_FILE = "codes.json"
 
 bot = telebot.TeleBot(API_TOKEN)
 user_temp_data = {} 
-chat_queue = []
 file_lock = threading.Lock() 
 
 # ================= Render Web Server =================
@@ -65,7 +49,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Cyber Bot 20.0 (All Features) is Running! 🔥"
+    return "Cyber Bot 20.0 is Running! 🔥"
 
 def run_web_server():
     port = int(os.environ.get("PORT", 8080))
@@ -83,29 +67,22 @@ def save_json(filename, data):
         with open(filename, 'w', encoding='utf-8') as f: 
             json.dump(data, f, indent=4, ensure_ascii=False)
 
-def load_codes(): return load_json(CODES_FILE)
-def save_codes(data): save_json(CODES_FILE, data)
-
 def get_user_data(user_id):
     data = load_json(DATA_FILE)
     uid = str(user_id)
     if uid not in data: 
         data[uid] = {
             'name': 'Unknown', 'points': 50, 'bank': 0, 
-            'joined': str(datetime.now()), 'streak': 0, 
-            'last_bonus': '', 'last_interest': ''
+            'joined': str(datetime.now()), 'streak': 0
         }
         save_json(DATA_FILE, data)
-    
-    if 'bank' not in data[uid]: data[uid]['bank'] = 0
-    if 'streak' not in data[uid]: data[uid]['streak'] = 0
-    save_json(DATA_FILE, data)
     return data[uid]
 
 def update_points(user_id, amount):
     data = load_json(DATA_FILE)
     uid = str(user_id)
     if uid not in data: get_user_data(user_id)
+    # Ensure points don't go negative if needed, currently allows negative
     data[uid]['points'] = data[uid].get('points', 0) + amount
     save_json(DATA_FILE, data)
     return data[uid]['points']
@@ -113,22 +90,26 @@ def update_points(user_id, amount):
 def get_points(user_id):
     data = load_json(DATA_FILE)
     return data.get(str(user_id), {}).get('points', 0)
+
 # ================= সাবস্ক্রিপশন চেক =================
 def is_subscribed(user_id):
     if not FORCE_SUB_CHANNEL: return True
     try:
         status = bot.get_chat_member(FORCE_SUB_CHANNEL, user_id).status
-        return status in ['creator', 'administrator', 'member']
-    except:
+        return status in ['creator', 'administrator', 'member', 'restricted']
+    except Exception as e:
+        # If bot is not admin in channel or error occurs, allow user
         return True 
 
 def get_sub_keyboard():
     mk = types.InlineKeyboardMarkup()
-    mk.add(types.InlineKeyboardButton("📢 চ্যানেলে জয়েন করুন", url=f"https://t.me/{FORCE_SUB_CHANNEL.replace('@','')}"))
+    # Telegram URL format fixed
+    channel_link = f"https://t.me/{FORCE_SUB_CHANNEL.replace('@','')}"
+    mk.add(types.InlineKeyboardButton("📢 চ্যানেলে জয়েন করুন", url=channel_link))
     mk.add(types.InlineKeyboardButton("✅ জয়েন করেছি", callback_data="check_sub"))
     return mk
 
-# ================= সম্পূর্ণ মেনু সিস্টেম =================
+# ================= মেনু সিস্টেম =================
 def get_home_menu(user_id):
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("🤖 এআই ও ক্রিয়েশন", "🛠 ইউটিলিটি টুলস")
@@ -158,23 +139,21 @@ def get_cyber_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("🔐 Base64 টুল", "💳 BIN চেকার")
     markup.add("💰 ক্রিপ্টো রেট", "✅ সাইট স্ট্যাটাস")
-    markup.add("👤 ফেইক আইডি", "🗣️ অ্যানোনিমাস চ্যাট") 
-    markup.add("🔙 মেইন মেনু")
+    markup.add("🎼 লিরিক্স ফাইন্ডার", "🔙 মেইন মেনু")
     return markup
 
 def get_fun_menu(user_id):
     user_points = get_points(user_id)
     game_url_with_params = f"{GAME_URL}?points={user_points}"
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=1)
     markup.add(types.KeyboardButton(text="🎮 প্লে সাইবার আর্কেড (Start)", web_app=types.WebAppInfo(url=game_url_with_params)))
-    markup.add("🎼 লিরিক্স ফাইন্ডার", "🐸 বাংলা মিম") 
     markup.add("🔙 মেইন মেনু")
     return markup
 
 def get_bank_menu(): 
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    markup.add("📥 টাকা জমা (Deposit)", "📤 টাকা উত্তোলন (Withdraw)")
-    markup.add("📈 সুদ সংগ্রহ (Interest)", "🎰 লটারি কিনুন (100 Pt)")
+    # Placeholder functionality
+    markup.add("👤 প্রোফাইল ও ব্যালেন্স")
     markup.add("🔙 মেইন মেনু")
     return markup
 
@@ -182,7 +161,7 @@ def get_admin_menu():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
     markup.add("💾 ব্যাকআপ", "📂 রিস্টোর") 
     markup.add("📢 ব্রডকাস্ট", "➕ পয়েন্ট অ্যাড")
-    markup.add("🎲 লটারি ড্র", "🔙 মেইন মেনু") 
+    markup.add("🔙 মেইন মেনু") 
     return markup
 
 def get_cancel_menu():
@@ -192,31 +171,49 @@ def get_cancel_menu():
 
 # ================= API Functions =================
 def get_ai_image(prompt):
-    try: return requests.get(f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt)}").content
+    try: 
+        # Added timeout
+        return requests.get(f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt)}", timeout=30).content
     except: return None
 
 def remove_bg(image_file):
     try:
-        return requests.post("https://api.remove.bg/v1.0/removebg", files={'image_file': image_file}, data={'size': 'auto'}, headers={'X-Api-Key': RMBG_API_KEY}).content
+        return requests.post(
+            "https://api.remove.bg/v1.0/removebg", 
+            files={'image_file': image_file}, 
+            data={'size': 'auto'}, 
+            headers={'X-Api-Key': RMBG_API_KEY},
+            timeout=30
+        ).content
     except: return None
 
-def get_ocr_text(image_bytes):
-    try:
-        url = "https://api.ocr.space/parse/image"
-        files = {'file': ('image.jpg', image_bytes, 'image/jpeg')}
-        payload = {'apikey': OCR_API_KEY, 'language': 'eng'}
-        r = requests.post(url, files=files, data=payload, timeout=15)
-        return r.json()['ParsedResults'][0]['ParsedText']
-    except: return None
-# ================= মেইন হ্যান্ডলার =================
+# ================= HANDLERS =================
+
+# --- Callback Query Handler (FIXED) ---
+@bot.callback_query_handler(func=lambda call: call.data == "check_sub")
+def callback_check_sub(call):
+    if is_subscribed(call.from_user.id):
+        bot.delete_message(call.message.chat.id, call.message.message_id)
+        bot.answer_callback_query(call.id, "✅ ধন্যবাদ! আপনি এখন বট ব্যবহার করতে পারবেন।")
+        send_welcome(call.message) # Re-trigger welcome
+    else:
+        bot.answer_callback_query(call.id, "❌ আপনি এখনো চ্যানেলে জয়েন করেননি!", show_alert=True)
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     uid = message.from_user.id
+    # Get user info to display name
+    first_name = message.from_user.first_name
+    
     if not is_subscribed(uid):
         bot.send_message(message.chat.id, "⚠️ বটটি ব্যবহার করতে আমাদের চ্যানেলে জয়েন করুন!", reply_markup=get_sub_keyboard())
         return
-    get_user_data(uid)
+    
+    # Initialize user data
+    data = get_user_data(uid)
+    data['name'] = first_name # Update name
+    save_json(DATA_FILE, load_json(DATA_FILE)) # Save name update
+    
     bot.reply_to(message, "👋 **আসসালামু আলাইকুম!**\nCyber Bot 20.0 (All Features Restored)", parse_mode="Markdown", reply_markup=get_home_menu(uid))
 
 @bot.message_handler(content_types=['web_app_data'])
@@ -230,17 +227,19 @@ def web_app_data_handler(message):
         db_data[uid]['points'] = new_balance
         save_json(DATA_FILE, db_data)
         bot.send_message(message.chat.id, f"🎮 **গেম আপডেট:**\n💰 ব্যালেন্স: {new_balance}")
-    except Exception as e: bot.send_message(message.chat.id, f"⚠️ Error: {e}")
+    except Exception as e: 
+        print(e)
 
-# --- File Handler (Backup, BG, OCR, PDF) ---
+# --- File Handler ---
 @bot.message_handler(content_types=['document', 'photo'])
 def handle_files(message):
     cid = message.chat.id
     uid = message.from_user.id
 
+    # Admin Restore
     if uid == ADMIN_ID and cid in user_temp_data and user_temp_data[cid].get('action') == 'restore_db':
         try:
-            if message.content_type == 'document' and message.document.file_name == "users.json":
+            if message.content_type == 'document':
                 file_info = bot.get_file(message.document.file_id)
                 downloaded_file = bot.download_file(file_info.file_path)
                 with open(DATA_FILE, 'wb') as new_file: new_file.write(downloaded_file)
@@ -249,38 +248,52 @@ def handle_files(message):
             else: bot.reply_to(message, "❌ ভুল ফাইল।")
         except: bot.reply_to(message, "❌ এরর।")
 
-    elif cid in user_temp_data:
+    # Image Tools
+    elif cid in user_temp_data and message.content_type == 'photo':
         action = user_temp_data[cid].get('action')
-        
-        if message.content_type == 'photo':
-            file_info = bot.get_file(message.photo[-1].file_id)
-            img_data = bot.download_file(file_info.file_path)
+        file_info = bot.get_file(message.photo[-1].file_id)
+        img_data = bot.download_file(file_info.file_path)
 
-            if action == 'remove_bg':
-                bot.reply_to(message, "⚙️ প্রসেসিং...")
-                res = remove_bg(img_data)
-                if res:
-                    bot.send_document(cid, BytesIO(res), caption="✅ নো ব্যাকগ্রাউন্ড", visible_file_name="no_bg.png")
-                    update_points(uid, -COST_PER_BG)
-                else: bot.reply_to(message, "❌ ফেইলড।")
-                
-            elif action == 'ocr_scan':
-                bot.reply_to(message, "⚙️ স্ক্যান হচ্ছে...")
-                txt = get_ocr_text(img_data)
-                if txt:
-                    bot.reply_to(message, f"📝 **টেক্সট:**\n{txt}")
-                    update_points(uid, -COST_PER_OCR)
-                else: bot.reply_to(message, "❌ টেক্সট পাওয়া যায়নি।")
-
-            elif action == 'img_to_pdf':
+        if action == 'remove_bg':
+            bot.reply_to(message, "⚙️ প্রসেসিং...")
+            res = remove_bg(img_data)
+            if res:
                 try:
-                    pdf_bytes = BytesIO()
-                    image = Image.open(BytesIO(img_data)).convert('RGB')
-                    image.save(pdf_bytes, format='PDF')
-                    pdf_bytes.seek(0)
-                    bot.send_document(cid, pdf_bytes, caption="📄 PDF তৈরি!", visible_file_name="image.pdf")
-                    update_points(uid, -COST_PER_PDF)
-                except: bot.reply_to(message, "❌ এরর।")
+                    # Check if response is JSON error
+                    err = json.loads(res)
+                    if 'errors' in err:
+                        bot.reply_to(message, "❌ API Key লিমিট শেষ বা ভুল।")
+                        user_temp_data.pop(cid); return
+                except: pass
+                
+                bot.send_document(cid, BytesIO(res), caption="✅ নো ব্যাকগ্রাউন্ড", visible_file_name="no_bg.png")
+                update_points(uid, -COSTS['BG'])
+            else: bot.reply_to(message, "❌ ফেইলড।")
+            
+        elif action == 'ocr_scan':
+            bot.reply_to(message, "⚙️ স্ক্যান হচ্ছে...")
+            try:
+                url = "https://api.ocr.space/parse/image"
+                files = {'file': ('image.jpg', img_data, 'image/jpeg')}
+                payload = {'apikey': OCR_API_KEY, 'language': 'eng'}
+                r = requests.post(url, files=files, data=payload, timeout=15)
+                res_json = r.json()
+                if res_json['ParsedResults']:
+                    txt = res_json['ParsedResults'][0]['ParsedText']
+                    bot.reply_to(message, f"📝 **টেক্সট:**\n{txt}")
+                    update_points(uid, -COSTS['OCR'])
+                else: bot.reply_to(message, "❌ টেক্সট পাওয়া যায়নি।")
+            except: bot.reply_to(message, "❌ সার্ভার এরর।")
+
+        elif action == 'img_to_pdf':
+            try:
+                pdf_bytes = BytesIO()
+                image = Image.open(BytesIO(img_data)).convert('RGB')
+                image.save(pdf_bytes, format='PDF')
+                pdf_bytes.seek(0)
+                bot.send_document(cid, pdf_bytes, caption="📄 PDF তৈরি!", visible_file_name="image.pdf")
+                update_points(uid, -COSTS['PDF'])
+            except: bot.reply_to(message, "❌ এরর।")
 
         if cid in user_temp_data: user_temp_data.pop(cid)
 
@@ -291,7 +304,6 @@ def handle_text(message):
     uid = message.from_user.id
     text = message.text
 
-    # --- ADMIN ---
     if uid == ADMIN_ID:
         if text == "💾 ব্যাকআপ":
             if os.path.exists(DATA_FILE):
@@ -312,16 +324,19 @@ def handle_text(message):
             bot.reply_to(message, "👤 User ID দিন:", reply_markup=get_cancel_menu())
             return
 
-    # --- INPUT PROCESSING ---
     if cid in user_temp_data:
         action = user_temp_data[cid].get('action')
 
         if action == 'broadcast' and uid == ADMIN_ID:
             data = load_json(DATA_FILE)
+            count = 0
+            bot.reply_to(message, "📢 ব্রডকাস্ট শুরু হচ্ছে...")
             for u in data:
-                try: bot.send_message(u, f"📢 **নোটিশ:**\n\n{text}", parse_mode="Markdown")
+                try: 
+                    bot.send_message(u, f"📢 **নোটিশ:**\n\n{text}", parse_mode="Markdown")
+                    count += 1
                 except: pass
-            bot.reply_to(message, "✅ ব্রডকাস্ট সম্পন্ন।", reply_markup=get_admin_menu())
+            bot.reply_to(message, f"✅ {count} জনকে পাঠানো হয়েছে।", reply_markup=get_admin_menu())
             user_temp_data.pop(cid)
             return
 
@@ -332,8 +347,9 @@ def handle_text(message):
 
         elif action == 'admin_add_point_amount':
             try:
-                update_points(user_temp_data[cid]['target'], int(text))
-                bot.reply_to(message, "✅ Done.", reply_markup=get_admin_menu())
+                target_id = user_temp_data[cid]['target']
+                update_points(target_id, int(text))
+                bot.reply_to(message, f"✅ ID: {target_id} তে পয়েন্ট যোগ হয়েছে।", reply_markup=get_admin_menu())
             except: bot.reply_to(message, "❌ Error.", reply_markup=get_admin_menu())
             user_temp_data.pop(cid)
             return
@@ -344,8 +360,8 @@ def handle_text(message):
             img = get_ai_image(text)
             if img:
                 bot.send_photo(cid, img, caption="🎨 Generated by AI")
-                update_points(uid, -COST_PER_IMAGE)
-            else: bot.reply_to(message, "❌ ফেইলড।")
+                update_points(uid, -COSTS['IMAGE'])
+            else: bot.reply_to(message, "❌ সার্ভার বিজি, আবার চেষ্টা করুন।")
             user_temp_data.pop(cid)
             return
         
@@ -354,7 +370,7 @@ def handle_text(message):
             try:
                 res = requests.get(f"https://text.pollinations.ai/{urllib.parse.quote('Write a social media post about: '+text)}").text
                 bot.reply_to(message, f"📝 **পোস্ট:**\n{res}")
-                update_points(uid, -COST_PER_POST)
+                update_points(uid, -COSTS['POST'])
             except: bot.reply_to(message, "❌ এরর।")
             user_temp_data.pop(cid)
             return
@@ -362,9 +378,9 @@ def handle_text(message):
         elif action == 'ai_chat':
             bot.send_chat_action(cid, 'typing')
             try:
-                res = requests.get(f"https://text.pollinations.ai/{urllib.parse.quote('Reply in Bengali: '+text)}").text
+                res = requests.get(f"https://text.pollinations.ai/{urllib.parse.quote(text)}").text
                 bot.reply_to(message, res, reply_markup=get_home_menu(uid))
-                update_points(uid, -COST_PER_AI_CHAT)
+                update_points(uid, -COSTS['AI_CHAT'])
             except: bot.reply_to(message, "⚠️ বিজি।")
             user_temp_data.pop(cid)
             return
@@ -374,15 +390,16 @@ def handle_text(message):
                 from gtts import gTTS
                 tts = gTTS(text, lang='bn')
                 f = BytesIO(); tts.write_to_fp(f); f.seek(0)
+                f.name = "audio.mp3"
                 bot.send_audio(cid, f, caption="🔊 Audio")
-                update_points(uid, -COST_PER_TTS)
+                update_points(uid, -COSTS['TTS'])
             except: bot.reply_to(message, "❌ সমস্যা।")
             user_temp_data.pop(cid)
             return
             
         elif action == 'spell_check':
             try:
-                res = requests.get(f"https://text.pollinations.ai/{urllib.parse.quote('Correct spelling: '+text)}").text
+                res = requests.get(f"https://text.pollinations.ai/{urllib.parse.quote('Correct the spelling: '+text)}").text
                 bot.reply_to(message, f"✅ কারেকশন:\n{res}")
             except: bot.reply_to(message, "❌ এরর।")
             user_temp_data.pop(cid)
@@ -391,12 +408,16 @@ def handle_text(message):
         # --- UTILITY ---
         elif action == 'weather_check':
             try:
-                url = f"http://api.weatherapi.com/v1/current.json?key=e868212133404c01b44123547231406&q={text}"
+                # Fixed URL format
+                url = f"http://api.weatherapi.com/v1/current.json?key={WEATHER_API_KEY}&q={text}"
                 w = requests.get(url).json()
-                msg = f"🌤 **আবহাওয়া ({w['location']['name']})**\nতাপমাত্রা: {w['current']['temp_c']}°C\nঅবস্থা: {w['current']['condition']['text']}"
-                bot.reply_to(message, msg)
-                update_points(uid, -COST_PER_WEATHER)
-            except: bot.reply_to(message, "❌ নাম ভুল।")
+                if 'error' in w:
+                    bot.reply_to(message, "❌ শহরের নাম ভুল।")
+                else:
+                    msg = f"🌤 **আবহাওয়া ({w['location']['name']})**\nতাপমাত্রা: {w['current']['temp_c']}°C\nঅবস্থা: {w['current']['condition']['text']}"
+                    bot.reply_to(message, msg)
+                    update_points(uid, -COSTS['WEATHER'])
+            except: bot.reply_to(message, "❌ এরর।")
             user_temp_data.pop(cid)
             return
 
@@ -404,7 +425,7 @@ def handle_text(message):
             try:
                 url = f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&data={text}"
                 bot.send_photo(cid, url, caption="📱 QR Code")
-                update_points(uid, -COST_PER_QR)
+                update_points(uid, -COSTS['QR'])
             except: bot.reply_to(message, "❌ এরর।")
             user_temp_data.pop(cid)
             return
@@ -413,7 +434,7 @@ def handle_text(message):
             try:
                 url = f"https://image.thum.io/get/width/1920/crop/1080/noanimate/{text}"
                 bot.send_photo(cid, url, caption="📸 স্ক্রিনশট")
-                update_points(uid, -COST_PER_SS)
+                update_points(uid, -COSTS['SS'])
             except: bot.reply_to(message, "❌ লিংক ভুল।")
             user_temp_data.pop(cid)
             return
@@ -435,13 +456,13 @@ def handle_text(message):
         elif action == 'repeater_count':
             try:
                 count = int(text)
-                if count > 2000: count = 2000
+                if count > 500: count = 500 # Limit reduced for safety
                 res = (user_temp_data[cid]['text_to_repeat'] + " ") * count
                 if len(res) > 4000:
                     f = BytesIO(res.encode()); f.name = "repeat.txt"
                     bot.send_document(cid, f, caption="✅ ফাইল।")
                 else: bot.reply_to(message, res)
-                update_points(uid, -COST_PER_REPEAT)
+                update_points(uid, -COSTS['REPEAT'])
             except: bot.reply_to(message, "❌ সংখ্যা দিন।")
             user_temp_data.pop(cid)
             return
@@ -460,7 +481,7 @@ def handle_text(message):
                 r = requests.get(f"https://lookup.binlist.net/{text[:6]}").json()
                 msg = f"💳 **BIN Info**\nBank: {r.get('bank',{}).get('name')}\nCountry: {r.get('country',{}).get('name')}"
                 bot.reply_to(message, msg)
-                update_points(uid, -COST_PER_BIN)
+                update_points(uid, -COSTS['BIN'])
             except: bot.reply_to(message, "❌ ভুল BIN।")
             user_temp_data.pop(cid)
             return
@@ -468,19 +489,20 @@ def handle_text(message):
         elif action == 'crypto_rate':
             try:
                 r = requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={text.upper()}USDT").json()
-                bot.reply_to(message, f"💰 {text.upper()}: ${r['price']}")
-                update_points(uid, -COST_PER_CRYPTO)
+                bot.reply_to(message, f"💰 {text.upper()}: ${float(r['price']):.2f}")
+                update_points(uid, -COSTS['CRYPTO'])
             except: bot.reply_to(message, "❌ ভুল কয়েন (e.g. BTC)।")
             user_temp_data.pop(cid)
             return
 
         elif action == 'site_check':
             try:
-                r = requests.get(text)
+                if not text.startswith('http'): text = 'http://' + text
+                r = requests.get(text, timeout=5)
                 status = "✅ অনলাইন" if r.status_code == 200 else f"❌ অফলাইন ({r.status_code})"
                 bot.reply_to(message, f"🌐 সাইট: {text}\nঅবস্থা: {status}")
-                update_points(uid, -COST_PER_SITE)
-            except: bot.reply_to(message, "❌ এরর।")
+                update_points(uid, -COSTS['SITE'])
+            except: bot.reply_to(message, "❌ সাইট অফলাইন বা ভুল লিংক।")
             user_temp_data.pop(cid)
             return
 
@@ -490,7 +512,7 @@ def handle_text(message):
                 lyrics = r.get('lyrics', 'পাওয়া যায়নি')
                 if len(lyrics) > 4000: lyrics = lyrics[:4000]
                 bot.reply_to(message, f"🎼 **লিরিক্স:**\n\n{lyrics}")
-                update_points(uid, -COST_PER_LYRICS)
+                update_points(uid, -COSTS['LYRICS'])
             except: bot.reply_to(message, "❌ পাওয়া যায়নি।")
             user_temp_data.pop(cid)
             return
@@ -499,14 +521,13 @@ def handle_text(message):
             try:
                 res = requests.get(f"http://tinyurl.com/api-create.php?url={text}").text
                 bot.reply_to(message, f"🔗 লিংক: {res}")
-                update_points(uid, -COST_PER_SHORTEN)
+                update_points(uid, -COSTS['SHORTEN'])
             except: bot.reply_to(message, "❌ এরর।")
             user_temp_data.pop(cid)
             return
 
         elif action == 'prayer_time':
             try:
-                date_str = datetime.now().strftime("%d-%m-%Y")
                 url = f"http://api.aladhan.com/v1/timingsByCity?city={text}&country=Bangladesh&method=1"
                 req = requests.get(url).json()
                 
@@ -520,17 +541,16 @@ def handle_text(message):
                            f"মাগরিব: {t['Maghrib']}\n"
                            f"এশা: {t['Isha']}")
                     bot.reply_to(message, msg)
-                    update_points(uid, -COST_PER_PRAYER)
+                    update_points(uid, -COSTS['PRAYER'])
                 else:
                     bot.reply_to(message, "❌ শহরের নাম সঠিক দিন (ইংরেজিতে)।")
-            except Exception as e:
+            except:
                 bot.reply_to(message, "❌ তথ্য পাওয়া যায়নি।")
             
             if cid in user_temp_data:
                 user_temp_data.pop(cid)
             return
 
-    # --- মেনু ন্যাভিগেশন ---
     if text == "🤖 এআই ও ক্রিয়েশন":
         bot.send_message(cid, "🤖 AI মেনু:", reply_markup=get_ai_menu())
     elif text == "🛠 ইউটিলিটি টুলস":
@@ -549,9 +569,7 @@ def handle_text(message):
         data = get_user_data(uid)
         msg = f"👤 **প্রোফাইল:**\n📛 নাম: {data['name']}\n💰 পয়েন্ট: {data['points']}\n🏦 ব্যাংক: {data['bank']}\n📅 জয়েন: {data['joined'][:10]}"
         bot.send_message(cid, msg)
-
-    # --- সাব-মেনু কমান্ড ---
-    # (AI)
+        
     elif text == "🤖 এআই চ্যাট":
         user_temp_data[cid] = {'action': 'ai_chat'}
         bot.reply_to(message, "🤖 কিছু লিখুন:", reply_markup=get_cancel_menu())
@@ -623,13 +641,10 @@ def handle_text(message):
         if cid in user_temp_data: user_temp_data.pop(cid)
         bot.reply_to(message, "❌ অ্যাকশন বাতিল করা হয়েছে।", reply_markup=get_home_menu(uid))
 
-# ================= বট রান করার কমান্ড =================
 if __name__ == "__main__":
-    # Flask সার্ভার একটি আলাদা থ্রেডে রান হবে (Render এর জন্য জরুরি)
     t = threading.Thread(target=run_web_server)
     t.start()
     
-    # বট পোলিং শুরু
     print("🤖 Bot is Running...")
-    bot.infinity_polling()
-        
+    # Polling settings for better stability
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
