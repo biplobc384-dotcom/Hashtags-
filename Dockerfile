@@ -6,4 +6,7 @@ COPY . .
 
 RUN pip install --no-cache-dir -r requirements.txt
 
+# এই লাইনটি যুক্ত করতে হবে
+EXPOSE 8080
+
 CMD ["python", "bot.py"]
